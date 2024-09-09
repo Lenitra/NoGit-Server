@@ -21,7 +21,7 @@ async def handle_connection(websocket, path):
 
 async def send_files(websocket):
     print("Début de l'envoi des fichiers...")
-    
+
     def get_file_structure(base_path):
         file_structure = {}
         for root, dirs, files in os.walk(base_path):
@@ -33,7 +33,7 @@ async def send_files(websocket):
 
     file_structure = get_file_structure(SYNC_FOLDER)
     print(f"Structure des fichiers à envoyer : {file_structure}")
-    
+
     # Envoyer la structure des fichiers
     await websocket.send(json.dumps(file_structure))
 
@@ -48,49 +48,61 @@ async def send_files(websocket):
                 await websocket.send(json.dumps({"filename": os.path.join(dirpath, filename), "filesize": len(file_data)}))
                 # Envoyer les données du fichier
                 await websocket.send(file_data)
-    
+
     # Indiquer la fin de la transmission
     await websocket.send("END_OF_FILES")
     print("Envoi terminé.")
 
+
 async def receive_files(websocket):
     print("Début de la réception des fichiers...")
-    
+
     file_structure = await websocket.recv()
     print(f"Structure des fichiers reçue : {file_structure}")
-    
+
     file_structure = json.loads(file_structure)
 
     # Créer les dossiers nécessaires dans le répertoire TOSYNC
     for folder in file_structure:
         os.makedirs(os.path.join("TOSYNC", folder), exist_ok=True)
-    
+
+    current_file = None
+    current_file_size = 0
+    bytes_received = 0
+    file_data = b""
+
     while True:
         try:
-            # Recevoir les informations du fichier
             file_info = await websocket.recv()
-            print(f"Informations du fichier reçues : {file_info}")
             if file_info == "END_OF_FILES":
                 print("Fin de la réception des fichiers.")
                 break
-            file_info = json.loads(file_info)
-            
-            # Recevoir les données du fichier
-            file_data = await websocket.recv()
-            print(f"Réception des données pour le fichier : {file_info['filename']}")
+            if isinstance(file_info, str):
+                file_info = json.loads(file_info)
+                current_file = os.path.join("TOSYNC", file_info["filename"])
+                current_file_size = file_info["filesize"]
+                bytes_received = 0
+                file_data = b""
+                print(
+                    f"Réception du fichier {file_info['filename']} (taille : {current_file_size})"
+                )
 
-            #remove the last split("/") to get the folder path
-            file_path = SYNC_FOLDER.split("/")[:-1]
-            file_path = "/".join(file_path)
-            file_path = os.path.join(file_path, file_info["filename"])
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)  # Assurez-vous que le répertoire existe
-            with open(file_path, "wb") as file:
-                file.write(file_data)
+            chunk = await websocket.recv()
+            file_data += chunk
+            bytes_received += len(chunk)
+            print(
+                f"Chunk reçu ({len(chunk)} octets), total reçu pour le fichier : {bytes_received}/{current_file_size}"
+            )
 
-            print(f"Fichier reçu et sauvegardé : {file_info['filename']}")
+            if bytes_received >= current_file_size:
+                with open(current_file, "wb") as f:
+                    f.write(file_data)
+                print(f"Fichier reçu et sauvegardé : {current_file}")
+
         except websockets.exceptions.ConnectionClosed:
             print("Connexion fermée.")
             break
+
 
 async def main():
     print("Serveur démarré sur ws://217.160.99.153:8765")
