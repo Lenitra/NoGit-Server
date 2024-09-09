@@ -64,7 +64,7 @@ async def receive_files(websocket):
 
     # Créer les dossiers nécessaires dans le répertoire TOSYNC
     for folder in file_structure:
-        os.makedirs(os.path.join("TOSYNC", folder), exist_ok=True)
+        os.makedirs(os.path.join(SYNC_FOLDER, folder), exist_ok=True)
 
     current_file = None
     current_file_size = 0
@@ -73,13 +73,16 @@ async def receive_files(websocket):
 
     while True:
         try:
+            # Le premier message est des métadonnées (sous forme de JSON)
             file_info = await websocket.recv()
             if file_info == "END_OF_FILES":
                 print("Fin de la réception des fichiers.")
                 break
+
+            # Si le message est une chaîne JSON, c'est un message de métadonnées
             if isinstance(file_info, str):
                 file_info = json.loads(file_info)
-                current_file = os.path.join("TOSYNC", file_info["filename"])
+                current_file = os.path.join(SYNC_FOLDER, file_info["filename"])
                 current_file_size = file_info["filesize"]
                 bytes_received = 0
                 file_data = b""
@@ -87,17 +90,24 @@ async def receive_files(websocket):
                     f"Réception du fichier {file_info['filename']} (taille : {current_file_size})"
                 )
 
-            chunk = await websocket.recv()
-            file_data += chunk
-            bytes_received += len(chunk)
-            print(
-                f"Chunk reçu ({len(chunk)} octets), total reçu pour le fichier : {bytes_received}/{current_file_size}"
-            )
+            # Recevoir les données brutes du fichier
+            while bytes_received < current_file_size:
+                chunk = await websocket.recv()
 
-            if bytes_received >= current_file_size:
-                with open(current_file, "wb") as f:
-                    f.write(file_data)
-                print(f"Fichier reçu et sauvegardé : {current_file}")
+                # Vérifier que le chunk est bien des bytes
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8")
+
+                file_data += chunk
+                bytes_received += len(chunk)
+                print(
+                    f"Chunk reçu ({len(chunk)} octets), total reçu pour le fichier : {bytes_received}/{current_file_size}"
+                )
+
+            # Une fois que tout le fichier est reçu, l'enregistrer
+            with open(current_file, "wb") as f:
+                f.write(file_data)
+            print(f"Fichier reçu et sauvegardé : {current_file}")
 
         except websockets.exceptions.ConnectionClosed:
             print("Connexion fermée.")
