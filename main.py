@@ -4,7 +4,7 @@ import os
 import json
 
 # Chemin du dossier à synchroniser
-SYNC_FOLDER = "/home/taumah/Bureau/TOSYNC"
+SYNC_FOLDER = "/root/MultiTiles"
 
 async def handle_connection(websocket, path):
     print(f"Nouvelle connexion : {path}")
@@ -93,8 +93,8 @@ async def receive_files(websocket):
             break
 
 async def main():
-    print("Serveur démarré sur ws://localhost:8765")
-    async with websockets.serve(handle_connection, "localhost", 8765):
+    print("Serveur démarré sur ws://217.160.99.153:8765")
+    async with websockets.serve(handle_connection, "217.160.99.153", 8765):
         await asyncio.Future()  # Run forever
 
 asyncio.run(main())
